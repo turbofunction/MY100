@@ -8,8 +8,8 @@
 #define PS2_CLK 12
 
 // PS2 controller confs
-#define pressures true
-#define rumble true
+#define PRESSURE false
+#define RUMBLE false
 
 // motor/servo shield motor pins
 #define DIRA 8
@@ -28,7 +28,7 @@ typedef struct {
   byte vibrate;
 } ps2_t;
 
-ps2_t volatile ps2 = { 0, 0, 0 };
+ps2_t ps2 = { 0, 0, 0 };
 
 typedef struct {
   const byte i;
@@ -39,8 +39,17 @@ const float axes_rest[] = {
   .07f, 1, 1, 1, 0, 1, 1
 };
 
+// axis labels
+#define ROTATE      0
+#define PITCH_1     1
+#define PITCH_2     2
+#define ROLL_2      3
+#define PITCH_CLAW  4
+#define ROLL_CLAW   5
+#define CLAW        6
+
 const byte rest_seq[] = {
-  1, 0, 2, 3, 4, 5, 6
+  PITCH_1, ROTATE, PITCH_2, ROLL_2, PITCH_CLAW, ROLL_CLAW, CLAW
 };
 
 /*
@@ -60,7 +69,7 @@ float axes[] = {
   axes_rest[6],
 };
 
-const byte axes_size = 7;
+#define AXES_SIZE 7
 
 byte axis_init = 0;
 
@@ -90,7 +99,7 @@ void setup() {
   // delay for PS2 module to startup
   delay(500);
 
-  ps2.error = ps2x.config_gamepad(PS2_CLK, PS2_CMD, PS2_SEL, PS2_DAT, pressures, rumble);
+  ps2.error = ps2x.config_gamepad(PS2_CLK, PS2_CMD, PS2_SEL, PS2_DAT, PRESSURE, RUMBLE);
 
   if (ps2.error == 0)
     Serial.println("Found Controller, configured successfully.");
@@ -207,73 +216,50 @@ void drive_axis(byte axis_i) {
   }
 }
 
-void drive_grabber() {
-  // rotate
-  float f = stf(ps2x.Analog(PSS_LX));
+void stick(byte axis, byte stick_axis, boolean reverse) {
+  float f = stf(ps2x.Analog(stick_axis));
   if (f) {
-    axes[0] += -f * BIG_STEP;
-    drive_axis(0);
+    f *= BIG_STEP;
+    if (reverse) {
+      f *= -1;
+    }
+    axes[axis] += f;
+    drive_axis(axis);
   }
+}
 
-  // pitch first segment
-  f = stf(ps2x.Analog(PSS_LY));
-  if (f) {
-    axes[1] += f * BIG_STEP;
-    drive_axis(1);
+void btn(byte axis, uint16_t inc, uint16_t dec) {
+  if (ps2x.Button(inc)) {
+    axes[axis] += SMALL_STEP;
+    drive_axis(axis);
+  } else if (ps2x.Button(dec)) {
+    axes[axis] -= SMALL_STEP;
+    drive_axis(axis);
   }
+}
 
-  // pitch second segment
-  if (ps2x.Button(PSB_PAD_UP)) {
-    axes[2] += SMALL_STEP;
-    drive_axis(2);
-  } else if (ps2x.Button(PSB_PAD_DOWN)) {
-    axes[2] -= SMALL_STEP;
-    drive_axis(2);
-  }
-
-  // roll second segment
-  if (ps2x.Button(PSB_PAD_LEFT)) {
-    axes[3] += SMALL_STEP;
-    drive_axis(3);
-  } else if (ps2x.Button(PSB_PAD_RIGHT)) {
-    axes[3] -= SMALL_STEP;
-    drive_axis(3);
-  }
-
-  // pitch grabber
-  if (ps2x.Button(PSB_L2)) {
-    axes[4] += SMALL_STEP;
-    drive_axis(4);
-  } else if (ps2x.Button(PSB_R2)) {
-    axes[4] -= SMALL_STEP;
-    drive_axis(4);
-  }
-
-  // roll grabber
-  byte x = ps2x.Analog(PSAB_SQUARE);
+void aBtn(byte axis, byte inc, byte dec) {
+  byte x = ps2x.Analog(inc);
   if (x) {
-    axes[5] += atf(x) * BIG_STEP;
-    drive_axis(5);
+    axes[axis] += atf(x) * BIG_STEP;
+    drive_axis(axis);
   } else {
-    x = ps2x.Analog(PSAB_CIRCLE);
+    x = ps2x.Analog(dec);
     if (x) {
-      axes[5] += -atf(x) * BIG_STEP;
-      drive_axis(5);
+      axes[axis] += -atf(x) * BIG_STEP;
+      drive_axis(axis);
     }
   }
+}
 
-  // open/close grabber
-  x = ps2x.Analog(PSAB_TRIANGLE);
-  if (x) {
-    axes[6] += atf(x) * BIG_STEP;
-    drive_axis(6);
-  } else {
-    x = ps2x.Analog(PSAB_CROSS);
-    if (x) {
-      axes[6] += -atf(x) * BIG_STEP;
-      drive_axis(6);
-    }
-  }
+void drive_arm() {
+  stick(ROTATE, PSS_LX, true);
+  stick(PITCH_1, PSS_LY, false);
+  aBtn(PITCH_2, PSAB_TRIANGLE, PSAB_CROSS);
+  btn(ROLL_2, PSB_L2, PSB_R2);
+  btn(PITCH_CLAW, PSB_PAD_UP, PSB_PAD_DOWN);
+  btn(ROLL_CLAW, PSB_PAD_LEFT, PSB_PAD_RIGHT);
+  aBtn(CLAW, PSAB_SQUARE, PSAB_CIRCLE);
 }
 
 void loop() {
@@ -300,7 +286,7 @@ void loop() {
     Serial.print("read_gamepad error ");
     Serial.println(ps2status, DEC);
 
-  } else if (axis_init < axes_size) {
+  } else if (axis_init < AXES_SIZE) {
     // stop motors
     analogWrite(PWMA, 0);
     analogWrite(PWMB, 0);
@@ -320,7 +306,7 @@ void loop() {
 
   } else {
     drive_tracks();
-    drive_grabber();
+    drive_arm();
   }
 
   delay(30);
