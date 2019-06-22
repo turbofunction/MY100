@@ -209,16 +209,16 @@ void drive_axis(byte axis_i) {
 
 void drive_grabber() {
   // rotate
-  byte x = ps2x.Analog(PSS_LX);
-  if (x) {
-    axes[0] += -stf(x) * BIG_STEP;
+  float f = stf(ps2x.Analog(PSS_LX));
+  if (f) {
+    axes[0] += -f * BIG_STEP;
     drive_axis(0);
   }
 
   // pitch first segment
-  x = ps2x.Analog(PSS_LY);
-  if (x) {
-    axes[1] += stf(x) * BIG_STEP;
+  f = stf(ps2x.Analog(PSS_LY));
+  if (f) {
+    axes[1] += f * BIG_STEP;
     drive_axis(1);
   }
 
@@ -250,7 +250,7 @@ void drive_grabber() {
   }
 
   // roll grabber
-  x = ps2x.Analog(PSAB_SQUARE);
+  byte x = ps2x.Analog(PSAB_SQUARE);
   if (x) {
     axes[5] += atf(x) * BIG_STEP;
     drive_axis(5);
