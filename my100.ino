@@ -30,10 +30,12 @@ typedef struct {
 
 ps2_t ps2 = { 0, 0, 0 };
 
+/*
 typedef struct {
   const byte i;
   const float pos;
 } axis_rest_t;
+*/
 
 const float axes_rest[] = {
   .07f, 1, 1, 1, 0, 1, 1
@@ -70,6 +72,16 @@ float axes[] = {
 };
 
 #define AXES_SIZE 7
+
+const float axis_limits[][2] = {
+  { -1, 1 },
+  { -.5f, 1 },
+  { -1, 1 },
+  { -1, 1 },
+  { -1, 1 },
+  { -1, 1 },
+  { -1, 1 },
+};
 
 byte axis_init = 0;
 
@@ -196,7 +208,7 @@ float atf(byte x) {
 }
 
 void drive_axis(byte axis_i) {
-  float axis = constrain(axes[axis_i], -1.f, 1.f);
+  float axis = constrain(axes[axis_i], axis_limits[axis_i][0], axis_limits[axis_i][1]);
   axes[axis_i] = axis;
   word pwm = SERVOMIN + TRAVEL + axis * TRAVEL + .5f;
 
