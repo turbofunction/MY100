@@ -32,21 +32,28 @@ typedef struct {
   const float pos;
 } axis_rest_t;
 
-const axis_rest_t axes_rest[] = {
-  { 0, .05f }
+const float axes_rest[] = {
+  .07f, 1.f, 1.f,
 };
 
-const byte axes_size = 1;
+const byte rest_seq[] = {
+  1, 0, 2,
+};
 
+const byte axes_size = 3;
+
+/*
 typedef struct {
   float pos;
+  const float min, max;
 } axis_t;
+*/
 
-axis_t axes[] = {
-  { axes_rest[0].pos }
+float axes[] = {
+  axes_rest[0], axes_rest[1], axes_rest[2],
 };
 
-bool grabber_initialized = false;
+byte axis_init = 0;
 
 ServoDriver servos = ServoDriver();
 
@@ -56,16 +63,6 @@ ServoDriver servos = ServoDriver();
 
 void (* resetFunc) (void) = 0;
 
-void rest_axes() {
-  byte axis;
-  for (byte i = 0; i < axes_size; ++i) {
-    axis = axes_rest[i].i;
-    axes[axis].pos = axes_rest[i].pos;
-    drive_servos(axis);
-    delay(500);
-  }
-}
-
 void setup() {
   servos.begin();
   servos.setPWMFreq(50);  // servos run at 50 Hz
@@ -74,6 +71,10 @@ void setup() {
   pinMode(DIRB, OUTPUT);
   pinMode(PWMA, OUTPUT);
   pinMode(PWMB, OUTPUT);
+
+  // reset just in case, I'm not taking much chances with this arduino crap...
+  analogWrite(PWMA, 0);
+  analogWrite(PWMB, 0);
 
   Serial.begin(115200);
 
@@ -170,14 +171,26 @@ float read_axis(byte x) {
   }
 }
 
-void drive_servos(byte axis) {
-  word pwm = SERVOMIN + TRAVEL + axes[axis].pos * TRAVEL + .5f;
+void drive_axis(byte axis_i) {
+  float axis = constrain(axes[axis_i], -1.f, 1.f);
+  axes[axis_i] = axis;
+  word pwm = SERVOMIN + TRAVEL + axis * TRAVEL + .5f;
+  word pwm2;
   // Serial.print(", ");
   // Serial.println(pwm, DEC);
 
-  switch (axis) {
+  switch (axis_i) {
     case 0:
       servos.setPWM(0, 0, pwm);
+      break;
+    case 1:
+      // special case for the dual-servo arm
+      servos.setPWM(1, 0, pwm);
+      pwm2 = SERVOMIN + TRAVEL + -axis * TRAVEL + .5f;
+      servos.setPWM(2, 0, pwm2);
+      break;
+    case 2:
+      servos.setPWM(3, 0, pwm);
       break;
     default:
       break;
@@ -185,24 +198,26 @@ void drive_servos(byte axis) {
 }
 
 void drive_grabber() {
-  float turn = -read_axis(ps2x.Analog(PSS_LX));
+  axes[0] += -read_axis(ps2x.Analog(PSS_LX)) * .05f;
+  drive_axis(0);
 
-  // Serial.print("turn, pos, pwm: ");
-  // Serial.print(turn, DEC);
+  axes[1] += read_axis(ps2x.Analog(PSS_LY)) * .05f;
+  drive_axis(1);
 
-  axes[0].pos = constrain(axes[0].pos + (turn * .05f), -1., 1.);
-  // Serial.print(", ");
-  // Serial.print(axes[0].pos, DEC);
-
-  drive_servos(0);
-
-  float lift = read_axis(ps2x.Analog(PSS_LY));
-
-  /*
-  for (byte servo = 0; servo <= 15; ++servo) {
-    servos.setPWM(servo, 0, SERVOMIN + ((SERVOMAX - SERVOMIN) / 2));
+  byte x = ps2x.Analog(PSAB_TRIANGLE);
+  Serial.print("PSAB_TRIANGLE: ");
+  Serial.print(x, DEC);
+  if (x) {
+    axes[2] += read_axis(x) * .02f;
+  } else {
+    x = ps2x.Analog(PSAB_CROSS);
+    if (x) {
+      axes[2] += -read_axis(x) * .02f;
+    }
   }
-  */
+  Serial.print(", axes[2]: ");
+  Serial.println(axes[2], DEC);
+  drive_axis(2);
 }
 
 void loop() {
@@ -211,6 +226,7 @@ void loop() {
      if you don't enable the rumble, use ps2x.read_gamepad(); with no values
      You should call this at least once a second
    */
+  byte axis;
 
   // no controller found
   if (ps2.error == 1)
@@ -220,15 +236,32 @@ void loop() {
   if (ps2.type == 2)
     resetFunc();
 
-  if (!grabber_initialized) {
-    rest_axes();
-    grabber_initialized = true;
-  }
+  bool ps2status = ps2x.read_gamepad(false, ps2.vibrate);
 
-  ps2x.read_gamepad(false, ps2.vibrate); //read controller and set large motor to spin at 'vibrate' speed
+  if (ps2status != 1) {
+    analogWrite(PWMA, 0);
+    analogWrite(PWMB, 0);
+    Serial.print("read_gamepad error ");
+    Serial.println(ps2status, DEC);
 
-  if (ps2x.ButtonPressed(PSB_START)) {
-    rest_axes();
+  } else if (axis_init < axes_size) {
+    // stop motors
+    analogWrite(PWMA, 0);
+    analogWrite(PWMB, 0);
+
+    Serial.print("Initializing axis ");
+    Serial.print(axis_init, DEC);
+    Serial.print("...");
+
+    axis = rest_seq[axis_init];
+    axes[axis] = axes_rest[axis];
+    drive_axis(axis);
+    ++axis_init;
+    Serial.println("ok");
+
+  } else if (ps2x.ButtonPressed(PSB_START)) {
+    axis_init = 0;
+
   } else {
     drive_tracks();
     drive_grabber();
@@ -291,5 +324,5 @@ void loop() {
   }
   */
 
-  delay(50);
+  delay(30);
 }
