@@ -14,8 +14,11 @@
 // motor/servo shield motor pins
 #define DIRA 8
 #define DIRB 7
-#define PWMA  9
-#define PWMB  6
+#define PWMA 9
+#define PWMB 6
+
+#define BIG_STEP .05f
+#define SMALL_STEP .02f
 
 PS2X ps2x;
 
@@ -33,14 +36,12 @@ typedef struct {
 } axis_rest_t;
 
 const float axes_rest[] = {
-  .07f, 1.f, 1.f,
+  .07f, 1, 1, 1, 0, 1, 1
 };
 
 const byte rest_seq[] = {
-  1, 0, 2,
+  1, 0, 2, 3, 4, 5, 6
 };
-
-const byte axes_size = 3;
 
 /*
 typedef struct {
@@ -50,8 +51,16 @@ typedef struct {
 */
 
 float axes[] = {
-  axes_rest[0], axes_rest[1], axes_rest[2],
+  axes_rest[0],
+  axes_rest[1],
+  axes_rest[2],
+  axes_rest[3],
+  axes_rest[4],
+  axes_rest[5],
+  axes_rest[6],
 };
+
+const byte axes_size = 7;
 
 byte axis_init = 0;
 
@@ -117,7 +126,7 @@ void drive_tracks() {
   int m1 = fwd, m2 = fwd;
 
   if (fwd > 140)
-    turn = 255 - turn;
+    turn = 0xff - turn;
 
   if (turn >= 128) {
     turn -= 128;
@@ -163,7 +172,8 @@ void drive_tracks() {
   analogWrite(PWMB, m2 * 2);
 }
 
-float read_axis(byte x) {
+/* Stick to Float */
+float stf(byte x) {
   if (x >= 128) {
     return (x - 128) / 127.f;
   } else {
@@ -171,13 +181,15 @@ float read_axis(byte x) {
   }
 }
 
+/* Analog to Float */
+float atf(byte x) {
+  return x / 255.f;
+}
+
 void drive_axis(byte axis_i) {
   float axis = constrain(axes[axis_i], -1.f, 1.f);
   axes[axis_i] = axis;
   word pwm = SERVOMIN + TRAVEL + axis * TRAVEL + .5f;
-  word pwm2;
-  // Serial.print(", ");
-  // Serial.println(pwm, DEC);
 
   switch (axis_i) {
     case 0:
@@ -186,38 +198,82 @@ void drive_axis(byte axis_i) {
     case 1:
       // special case for the dual-servo arm
       servos.setPWM(1, 0, pwm);
-      pwm2 = SERVOMIN + TRAVEL + -axis * TRAVEL + .5f;
-      servos.setPWM(2, 0, pwm2);
-      break;
-    case 2:
-      servos.setPWM(3, 0, pwm);
+      // negation to the other servo
+      servos.setPWM(2, 0, SERVOMIN + TRAVEL + -axis * TRAVEL + .5f);
       break;
     default:
+      servos.setPWM(axis_i + 1, 0, pwm);
       break;
   }
 }
 
 void drive_grabber() {
-  axes[0] += -read_axis(ps2x.Analog(PSS_LX)) * .05f;
-  drive_axis(0);
-
-  axes[1] += read_axis(ps2x.Analog(PSS_LY)) * .05f;
-  drive_axis(1);
-
-  byte x = ps2x.Analog(PSAB_TRIANGLE);
-  Serial.print("PSAB_TRIANGLE: ");
-  Serial.print(x, DEC);
+  // rotate
+  byte x = ps2x.Analog(PSS_LX);
   if (x) {
-    axes[2] += read_axis(x) * .02f;
+    axes[0] += -stf(x) * BIG_STEP;
+    drive_axis(0);
+  }
+
+  // pitch first segment
+  x = ps2x.Analog(PSS_LY);
+  if (x) {
+    axes[1] += stf(x) * BIG_STEP;
+    drive_axis(1);
+  }
+
+  // pitch second segment
+  if (ps2x.Button(PSB_PAD_UP)) {
+    axes[2] += SMALL_STEP;
+    drive_axis(2);
+  } else if (ps2x.Button(PSB_PAD_DOWN)) {
+    axes[2] -= SMALL_STEP;
+    drive_axis(2);
+  }
+
+  // roll second segment
+  if (ps2x.Button(PSB_PAD_LEFT)) {
+    axes[3] += SMALL_STEP;
+    drive_axis(3);
+  } else if (ps2x.Button(PSB_PAD_RIGHT)) {
+    axes[3] -= SMALL_STEP;
+    drive_axis(3);
+  }
+
+  // pitch grabber
+  if (ps2x.Button(PSB_L2)) {
+    axes[4] += SMALL_STEP;
+    drive_axis(4);
+  } else if (ps2x.Button(PSB_R2)) {
+    axes[4] -= SMALL_STEP;
+    drive_axis(4);
+  }
+
+  // roll grabber
+  x = ps2x.Analog(PSAB_SQUARE);
+  if (x) {
+    axes[5] += atf(x) * BIG_STEP;
+    drive_axis(5);
+  } else {
+    x = ps2x.Analog(PSAB_CIRCLE);
+    if (x) {
+      axes[5] += -atf(x) * BIG_STEP;
+      drive_axis(5);
+    }
+  }
+
+  // open/close grabber
+  x = ps2x.Analog(PSAB_TRIANGLE);
+  if (x) {
+    axes[6] += atf(x) * BIG_STEP;
+    drive_axis(6);
   } else {
     x = ps2x.Analog(PSAB_CROSS);
     if (x) {
-      axes[2] += -read_axis(x) * .02f;
+      axes[6] += -atf(x) * BIG_STEP;
+      drive_axis(6);
     }
   }
-  Serial.print(", axes[2]: ");
-  Serial.println(axes[2], DEC);
-  drive_axis(2);
 }
 
 void loop() {
@@ -266,63 +322,6 @@ void loop() {
     drive_tracks();
     drive_grabber();
   }
-
-  /*
-  if(ps2x.Button(PSB_START))         //will be TRUE as long as button is pressed
-    Serial.println("Start is being held");
-  if(ps2x.Button(PSB_SELECT))
-    Serial.println("Select is being held");
-
-  if(ps2x.Button(PSB_PAD_UP)) {      //will be TRUE as long as button is pressed
-    Serial.print("Up held this hard: ");
-    Serial.println(ps2x.Analog(PSAB_PAD_UP), DEC);
-  }
-  if(ps2x.Button(PSB_PAD_RIGHT)){
-    Serial.print("Right held this hard: ");
-    Serial.println(ps2x.Analog(PSAB_PAD_RIGHT), DEC);
-  }
-  if(ps2x.Button(PSB_PAD_LEFT)){
-    Serial.print("LEFT held this hard: ");
-    Serial.println(ps2x.Analog(PSAB_PAD_LEFT), DEC);
-  }
-  if(ps2x.Button(PSB_PAD_DOWN)){
-    Serial.print("DOWN held this hard: ");
-    Serial.println(ps2x.Analog(PSAB_PAD_DOWN), DEC);
-  }
-
-  ps2.vibrate = ps2x.Analog(PSAB_CROSS);  //this will set the large motor vibrate speed based on how hard you press the blue (X) button
-
-  if (ps2x.NewButtonState()) {        //will be TRUE if any button changes state (on to off, or off to on)
-    if(ps2x.Button(PSB_L3))
-      Serial.println("L3 pressed");
-    if(ps2x.Button(PSB_R3))
-      Serial.println("R3 pressed");
-    if(ps2x.Button(PSB_L2))
-      Serial.println("L2 pressed");
-    if(ps2x.Button(PSB_R2))
-      Serial.println("R2 pressed");
-    if(ps2x.Button(PSB_TRIANGLE))
-      Serial.println("Triangle pressed");
-  }
-
-  if(ps2x.ButtonPressed(PSB_CIRCLE))               //will be TRUE if button was JUST pressed
-    Serial.println("Circle just pressed");
-  if(ps2x.NewButtonState(PSB_CROSS))               //will be TRUE if button was JUST pressed OR released
-    Serial.println("X just changed");
-  if(ps2x.ButtonReleased(PSB_SQUARE))              //will be TRUE if button was JUST released
-    Serial.println("Square just released");
-
-  if(ps2x.Button(PSB_L1) || ps2x.Button(PSB_R1)) { //print stick values if either is TRUE
-    Serial.print("Stick Values:");
-    Serial.print(ps2x.Analog(PSS_LY), DEC); //Left stick, Y axis. Other options: LX, RY, RX
-    Serial.print(",");
-    Serial.print(ps2x.Analog(PSS_LX), DEC);
-    Serial.print(",");
-    Serial.print(ps2x.Analog(PSS_RY), DEC);
-    Serial.print(",");
-    Serial.println(ps2x.Analog(PSS_RX), DEC);
-  }
-  */
 
   delay(30);
 }
