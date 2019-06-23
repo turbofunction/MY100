@@ -212,19 +212,32 @@ void drive_axis(byte axis_i) {
   axes[axis_i] = axis;
   word pwm = SERVOMIN + TRAVEL + axis * TRAVEL + .5f;
 
+  // whether to update claw pitch (stabilize)
+  bool stab_claw = false;
+
   switch (axis_i) {
-    case 0:
+    case ROTATE:
       servos.setPWM(0, 0, pwm);
       break;
-    case 1:
-      // special case for the dual-servo arm
+    case PITCH_1:
+      // special case for the dual-servo arm; mirror the other servo
+      word pwm2 = SERVOMIN + TRAVEL + -axis * TRAVEL + .5f;
       servos.setPWM(1, 0, pwm);
-      // negation to the other servo
-      servos.setPWM(2, 0, SERVOMIN + TRAVEL + -axis * TRAVEL + .5f);
+      servos.setPWM(2, 0, pwm2);
+      stab_claw = true;
       break;
+    case PITCH_2:
+    case ROLL_2:
+    // case ROLL_CLAW:
+      stab_claw = true;
     default:
       servos.setPWM(axis_i + 1, 0, pwm);
       break;
+  }
+
+  if (stab_claw) {
+    // axes[PITCH_CLAW] = TODO
+    // drive_axis(PITCH_CLAW);
   }
 }
 
@@ -243,25 +256,27 @@ void stick(byte axis, byte stick_axis, boolean reverse) {
 void btn(byte axis, uint16_t inc, uint16_t dec) {
   if (ps2x.Button(inc)) {
     axes[axis] += SMALL_STEP;
-    drive_axis(axis);
   } else if (ps2x.Button(dec)) {
     axes[axis] -= SMALL_STEP;
-    drive_axis(axis);
+  } else {
+    return;
   }
+  drive_axis(axis);
 }
 
 void aBtn(byte axis, byte inc, byte dec) {
   byte x = ps2x.Analog(inc);
   if (x) {
     axes[axis] += atf(x) * BIG_STEP;
-    drive_axis(axis);
   } else {
     x = ps2x.Analog(dec);
     if (x) {
       axes[axis] += -atf(x) * BIG_STEP;
-      drive_axis(axis);
+    } else {
+      return;
     }
   }
+  drive_axis(axis);
 }
 
 void drive_arm() {
@@ -280,8 +295,6 @@ void loop() {
      if you don't enable the rumble, use ps2x.read_gamepad(); with no values
      You should call this at least once a second
    */
-  byte axis;
-
   // no controller found
   if (ps2.error == 1)
     resetFunc();
@@ -290,13 +303,12 @@ void loop() {
   if (ps2.type == 2)
     resetFunc();
 
-  bool ps2status = ps2x.read_gamepad(false, ps2.vibrate);
+  bool ps2ok = ps2x.read_gamepad(false, ps2.vibrate);
 
-  if (ps2status != 1) {
+  if (!ps2ok) {
     analogWrite(PWMA, 0);
     analogWrite(PWMB, 0);
-    Serial.print("read_gamepad error ");
-    Serial.println(ps2status, DEC);
+    Serial.print("read_gamepad error");
 
   } else if (axis_init < AXES_SIZE) {
     // stop motors
@@ -307,10 +319,11 @@ void loop() {
     Serial.print(axis_init, DEC);
     Serial.print("...");
 
-    axis = rest_seq[axis_init];
+    byte axis = rest_seq[axis_init];
     axes[axis] = axes_rest[axis];
     drive_axis(axis);
     ++axis_init;
+    delay(200);
     Serial.println("ok");
 
   } else if (ps2x.ButtonPressed(PSB_START)) {
