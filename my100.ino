@@ -8,8 +8,8 @@
 #define PS2_CLK 12
 
 // PS2 controller confs
-#define PRESSURE false
-#define RUMBLE false
+#define PRESSURE true
+#define RUMBLE true
 
 // motor/servo shield motor pins
 #define DIRA 8
@@ -21,6 +21,8 @@
 #define SMALL_STEP .02f
 
 PS2X ps2x;
+
+byte ps2_startup;
 
 typedef struct {
   int error;
@@ -38,7 +40,7 @@ typedef struct {
 */
 
 const float axes_rest[] = {
-  .07f, 1, 1, 1, 0, 1, 1
+  .07f, 1, 1, .47f, .3f, .55f, -1
 };
 
 // axis labels
@@ -76,11 +78,11 @@ float axes[] = {
 const float axis_limits[][2] = {
   { -1, 1 },
   { -.5f, 1 },
+  { -.3f, 1 },
   { -1, 1 },
+  { -.95f, 1 },
   { -1, 1 },
-  { -1, 1 },
-  { -1, 1 },
-  { -1, 1 },
+  { -.62f, .2f },
 };
 
 byte axis_init = 0;
@@ -139,6 +141,8 @@ void setup() {
       Serial.println("Wireless Sony DualShock Controller found.");
       break;
    }
+
+   ps2_startup = 6;
 }
 
 void drive_tracks() {
@@ -211,6 +215,7 @@ void drive_axis(byte axis_i) {
   float axis = constrain(axes[axis_i], axis_limits[axis_i][0], axis_limits[axis_i][1]);
   axes[axis_i] = axis;
   word pwm = SERVOMIN + TRAVEL + axis * TRAVEL + .5f;
+  word pwm2;
 
   // whether to update claw pitch (stabilize)
   bool stab_claw = false;
@@ -221,7 +226,7 @@ void drive_axis(byte axis_i) {
       break;
     case PITCH_1:
       // special case for the dual-servo arm; mirror the other servo
-      word pwm2 = SERVOMIN + TRAVEL + -axis * TRAVEL + .5f;
+      pwm2 = SERVOMIN + TRAVEL + -axis * TRAVEL + .5f;
       servos.setPWM(1, 0, pwm);
       servos.setPWM(2, 0, pwm2);
       stab_claw = true;
@@ -244,7 +249,7 @@ void drive_axis(byte axis_i) {
 void stick(byte axis, byte stick_axis, boolean reverse) {
   float f = stf(ps2x.Analog(stick_axis));
   if (f) {
-    f *= BIG_STEP;
+    f *= SMALL_STEP;
     if (reverse) {
       f *= -1;
     }
@@ -267,11 +272,11 @@ void btn(byte axis, uint16_t inc, uint16_t dec) {
 void aBtn(byte axis, byte inc, byte dec) {
   byte x = ps2x.Analog(inc);
   if (x) {
-    axes[axis] += atf(x) * BIG_STEP;
+    axes[axis] += atf(x) * SMALL_STEP;
   } else {
     x = ps2x.Analog(dec);
     if (x) {
-      axes[axis] += -atf(x) * BIG_STEP;
+      axes[axis] += -atf(x) * SMALL_STEP;
     } else {
       return;
     }
@@ -282,9 +287,9 @@ void aBtn(byte axis, byte inc, byte dec) {
 void drive_arm() {
   stick(ROTATE, PSS_LX, true);
   stick(PITCH_1, PSS_LY, false);
-  aBtn(PITCH_2, PSAB_TRIANGLE, PSAB_CROSS);
-  btn(ROLL_2, PSB_L2, PSB_R2);
-  btn(PITCH_CLAW, PSB_PAD_UP, PSB_PAD_DOWN);
+  aBtn(PITCH_2, PSAB_CROSS, PSAB_TRIANGLE);
+  btn(ROLL_2, PSB_R2, PSB_L2);
+  btn(PITCH_CLAW, PSB_PAD_DOWN, PSB_PAD_UP);
   btn(ROLL_CLAW, PSB_PAD_LEFT, PSB_PAD_RIGHT);
   aBtn(CLAW, PSAB_SQUARE, PSAB_CIRCLE);
 }
@@ -303,7 +308,13 @@ void loop() {
   if (ps2.type == 2)
     resetFunc();
 
-  bool ps2ok = ps2x.read_gamepad(false, ps2.vibrate);
+  bool ps2ok;
+  if (ps2_startup) {
+    ps2ok = ps2x.read_gamepad(false, 0xff);
+    --ps2_startup;
+  } else {
+    ps2ok = ps2x.read_gamepad(false, ps2.vibrate);
+  }
 
   if (!ps2ok) {
     analogWrite(PWMA, 0);
