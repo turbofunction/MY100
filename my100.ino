@@ -40,7 +40,7 @@ typedef struct {
 */
 
 const float axes_rest[] = {
-  .07f, 1, 1, .47f, .3f, .55f, -1
+  .07f, 1, 1, .47f, 0, .55f, -1
 };
 
 // axis labels
@@ -78,7 +78,7 @@ float axes[] = {
 const float axis_limits[][2] = {
   { -1, 1 },
   { -.5f, 1 },
-  { -.3f, 1 },
+  { -.3f, .93f },
   { -1, 1 },
   { -.95f, 1 },
   { -1, 1 },
@@ -216,6 +216,7 @@ void drive_axis(byte axis_i) {
   axes[axis_i] = axis;
   word pwm = SERVOMIN + TRAVEL + axis * TRAVEL + .5f;
   word pwm2;
+  float stab;
 
   // whether to update claw pitch (stabilize)
   bool stab_claw = false;
@@ -231,18 +232,30 @@ void drive_axis(byte axis_i) {
       servos.setPWM(2, 0, pwm2);
       stab_claw = true;
       break;
+    case PITCH_CLAW:
+      stab_claw = true;
+      break;
     case PITCH_2:
     case ROLL_2:
     // case ROLL_CLAW:
       stab_claw = true;
+      // fall through
     default:
       servos.setPWM(axis_i + 1, 0, pwm);
       break;
   }
 
   if (stab_claw) {
-    // axes[PITCH_CLAW] = TODO
-    // drive_axis(PITCH_CLAW);
+    stab = .15f
+      - (1.1f * (axis_limits[PITCH_1][1] - axes[PITCH_1]))
+      + (.9f * (axis_limits[PITCH_2][1] - axes[PITCH_2]));
+    stab *= constrain(1.f - abs(axes_rest[ROLL_2] - axes[ROLL_2]), 0, 1);
+    axis = constrain(
+      axes[PITCH_CLAW] + stab,
+      axis_limits[PITCH_CLAW][0],
+      axis_limits[PITCH_CLAW][1]);
+    pwm = SERVOMIN + TRAVEL + axis * TRAVEL + .5f;
+    servos.setPWM(PITCH_CLAW + 1, 0, pwm);
   }
 }
 
