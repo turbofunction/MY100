@@ -78,7 +78,7 @@ float axes[] = {
 const float axis_limits[][2] = {
   { -1, 1 },
   { -.5f, 1 },
-  { -.3f, .93f },
+  { -.55f, .7f },
   { -1, 1 },
   { -.95f, 1 },
   { -1, 1 },
@@ -145,9 +145,9 @@ void setup() {
    ps2_startup = 6;
 }
 
-void drive_tracks() {
-  byte fwd = ps2x.Analog(PSS_RY);
-  byte turn = ps2x.Analog(PSS_RX);
+void drive_tracks(byte fwd_axis, byte turn_axis) {
+  byte fwd = ps2x.Analog(fwd_axis);
+  byte turn = ps2x.Analog(turn_axis);
   int m1 = fwd, m2 = fwd;
 
   if (fwd > 140)
@@ -297,7 +297,8 @@ void aBtn(byte axis, byte inc, byte dec) {
   drive_axis(axis);
 }
 
-void drive_arm() {
+void drive() {
+  drive_tracks(PSS_RY, PSS_RX);
   stick(ROTATE, PSS_LX, true);
   stick(PITCH_1, PSS_LY, false);
   aBtn(PITCH_2, PSAB_CROSS, PSAB_TRIANGLE);
@@ -354,8 +355,7 @@ void loop() {
     axis_init = 0;
 
   } else {
-    drive_tracks();
-    drive_arm();
+    drive();
   }
 
   delay(30);
