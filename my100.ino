@@ -17,7 +17,7 @@
 #define PWMA 9
 #define PWMB 6
 
-#define BIG_STEP .05f
+// #define BIG_STEP .05f
 #define SMALL_STEP .02f
 
 PS2X ps2x;
@@ -300,7 +300,7 @@ void aBtn(byte axis, byte inc, byte dec) {
 void drive() {
   drive_tracks(PSS_RY, PSS_RX);
   stick(ROTATE, PSS_LX, true);
-  stick(PITCH_1, PSS_LY, false);
+  stick(PITCH_1, PSS_LY, true);
   aBtn(PITCH_2, PSAB_CROSS, PSAB_TRIANGLE);
   btn(ROLL_2, PSB_R2, PSB_L2);
   btn(PITCH_CLAW, PSB_PAD_DOWN, PSB_PAD_UP);
