@@ -305,10 +305,10 @@ void drive() {
   drive_tracks(PSS_LY, PSS_LX);
   stick(ROTATE, PSS_RX, true);
   stick(PITCH_1, PSS_RY, true);
-  anaBtn(PITCH_2, PSAB_CROSS, PSAB_TRIANGLE);
-  anaBtn(ROLL_2, PSAB_CIRCLE, PSAB_SQUARE);
-  digiBtn(PITCH_CLAW, PSB_PAD_DOWN, PSB_PAD_UP);
-  digiBtn(ROLL_CLAW, PSB_PAD_RIGHT, PSB_PAD_LEFT);
+  digiBtn(PITCH_2, PSB_PAD_DOWN, PSB_PAD_UP);
+  digiBtn(ROLL_2, PSB_PAD_RIGHT, PSB_PAD_LEFT);
+  anaBtn(PITCH_CLAW, PSAB_CROSS, PSAB_TRIANGLE);
+  anaBtn(ROLL_CLAW, PSAB_CIRCLE, PSAB_SQUARE);
   digiBtn(CLAW, PSB_R1, PSB_R2);
 }
 
