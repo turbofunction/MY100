@@ -17,9 +17,6 @@
 #define PWMA 9
 #define PWMB 6
 
-// #define BIG_STEP .05f
-#define SMALL_STEP .02f
-
 PS2X ps2x;
 
 byte ps2_startup;
@@ -40,7 +37,7 @@ typedef struct {
 */
 
 const float axes_rest[] = {
-  .07f, 1, 1, .47f, 0, .55f, -1
+  .0f, 1, 1, .47f, 0, .55f, -1
 };
 
 // axis labels
@@ -92,6 +89,11 @@ ServoDriver servos = ServoDriver();
 #define SERVOMIN 104
 #define SERVOMAX 482
 #define TRAVEL (SERVOMAX - SERVOMIN) / 2.f
+
+#define SMALL_STEP .02f
+#define BIG_STEP .05f
+
+float speed = SMALL_STEP;
 
 void (* resetFunc) (void) = 0;
 
@@ -262,7 +264,7 @@ void drive_axis(byte axis_i) {
 void stick(byte axis, byte stick_axis, boolean reverse) {
   float f = stf(ps2x.Analog(stick_axis));
   if (f) {
-    f *= SMALL_STEP;
+    f *= speed;
     if (reverse) {
       f *= -1;
     }
@@ -271,25 +273,27 @@ void stick(byte axis, byte stick_axis, boolean reverse) {
   }
 }
 
-void btn(byte axis, uint16_t inc, uint16_t dec) {
+// digi button
+void digiBtn(byte axis, uint16_t inc, uint16_t dec) {
   if (ps2x.Button(inc)) {
-    axes[axis] += SMALL_STEP;
+    axes[axis] += speed;
   } else if (ps2x.Button(dec)) {
-    axes[axis] -= SMALL_STEP;
+    axes[axis] -= speed;
   } else {
     return;
   }
   drive_axis(axis);
 }
 
-void aBtn(byte axis, byte inc, byte dec) {
+// analog button
+void anaBtn(byte axis, byte inc, byte dec) {
   byte x = ps2x.Analog(inc);
   if (x) {
-    axes[axis] += atf(x) * SMALL_STEP;
+    axes[axis] += atf(x) * speed;
   } else {
     x = ps2x.Analog(dec);
     if (x) {
-      axes[axis] += -atf(x) * SMALL_STEP;
+      axes[axis] += -atf(x) * speed;
     } else {
       return;
     }
@@ -298,14 +302,14 @@ void aBtn(byte axis, byte inc, byte dec) {
 }
 
 void drive() {
-  drive_tracks(PSS_RY, PSS_RX);
-  stick(ROTATE, PSS_LX, true);
-  stick(PITCH_1, PSS_LY, true);
-  aBtn(PITCH_2, PSAB_CROSS, PSAB_TRIANGLE);
-  btn(ROLL_2, PSB_R2, PSB_L2);
-  btn(PITCH_CLAW, PSB_PAD_DOWN, PSB_PAD_UP);
-  btn(ROLL_CLAW, PSB_PAD_LEFT, PSB_PAD_RIGHT);
-  aBtn(CLAW, PSAB_SQUARE, PSAB_CIRCLE);
+  drive_tracks(PSS_LY, PSS_LX);
+  stick(ROTATE, PSS_RX, true);
+  stick(PITCH_1, PSS_RY, true);
+  anaBtn(PITCH_2, PSAB_CROSS, PSAB_TRIANGLE);
+  anaBtn(ROLL_2, PSAB_CIRCLE, PSAB_SQUARE);
+  digiBtn(PITCH_CLAW, PSB_PAD_DOWN, PSB_PAD_UP);
+  digiBtn(ROLL_CLAW, PSB_PAD_RIGHT, PSB_PAD_LEFT);
+  digiBtn(CLAW, PSB_R1, PSB_R2);
 }
 
 void loop() {
@@ -353,6 +357,16 @@ void loop() {
 
   } else if (ps2x.ButtonPressed(PSB_START)) {
     axis_init = 0;
+
+  } else if (ps2x.ButtonPressed(PSB_SELECT)) {
+    ps2x.read_gamepad(false, 0xff);
+    if (speed == SMALL_STEP) {
+      speed = BIG_STEP;
+      delay(300);
+    } else {
+      speed = SMALL_STEP;
+      delay(100);
+    }
 
   } else {
     drive();
