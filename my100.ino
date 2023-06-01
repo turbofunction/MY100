@@ -274,11 +274,14 @@ void stick(byte axis, byte stick_axis, boolean reverse) {
 }
 
 // digi button
-void digiBtn(byte axis, uint16_t inc, uint16_t dec) {
+void digiBtn(byte axis, uint16_t inc, uint16_t dec, float customSpeed) {
+  if (!customSpeed) {
+    customSpeed = speed;
+  }
   if (ps2x.Button(inc)) {
-    axes[axis] += speed;
+    axes[axis] += customSpeed;
   } else if (ps2x.Button(dec)) {
-    axes[axis] -= speed;
+    axes[axis] -= customSpeed;
   } else {
     return;
   }
@@ -286,6 +289,8 @@ void digiBtn(byte axis, uint16_t inc, uint16_t dec) {
 }
 
 // analog button
+// (Not useful, buttons really don't have any analog range.
+// Maybe due to the cheap controller.)
 void anaBtn(byte axis, byte inc, byte dec) {
   byte x = ps2x.Analog(inc);
   if (x) {
@@ -301,15 +306,28 @@ void anaBtn(byte axis, byte inc, byte dec) {
   drive_axis(axis);
 }
 
+// open / close
+void snapBtn(byte axis, uint16_t inc, uint16_t dec) {
+  if (ps2x.Button(inc)) {
+    axes[axis] = 1;
+  } else if (ps2x.Button(dec)) {
+    axes[axis] = -1;
+  } else {
+    return;
+  }
+  drive_axis(axis);
+}
+
 void drive() {
   drive_tracks(PSS_LY, PSS_LX);
   stick(ROTATE, PSS_RX, true);
   stick(PITCH_1, PSS_RY, true);
-  digiBtn(PITCH_2, PSB_PAD_DOWN, PSB_PAD_UP);
-  digiBtn(ROLL_2, PSB_PAD_RIGHT, PSB_PAD_LEFT);
-  anaBtn(PITCH_CLAW, PSAB_CROSS, PSAB_TRIANGLE);
-  anaBtn(ROLL_CLAW, PSAB_CIRCLE, PSAB_SQUARE);
-  digiBtn(CLAW, PSB_R1, PSB_R2);
+  digiBtn(PITCH_2, PSB_PAD_DOWN, PSB_PAD_UP, 0);
+  digiBtn(ROLL_2, PSB_PAD_RIGHT, PSB_PAD_LEFT, 0);
+  digiBtn(PITCH_CLAW, PSB_CROSS, PSB_TRIANGLE, 0);
+  digiBtn(ROLL_CLAW, PSB_CIRCLE, PSB_SQUARE, 0);
+  digiBtn(CLAW, PSB_R1, PSB_R2, BIG_STEP);
+  snapBtn(CLAW, PSB_L3, PSB_R3);
 }
 
 void loop() {
